@@ -1,11 +1,11 @@
 #include "ros/ros.h"
-
+#include "sensor_msgs/Imu.h"
+#include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include <bits/stdc++.h>
 #include "kalman/ekfilter.hpp"
 #include <cmath>
 
-
-class cPlaneEKF : public Kalman::EKFilter<double,1,false,true,false> {
+class cPlaneEKF:public Kalman::EKFilter<double,1,false,true,false>{
 public:
         cPlaneEKF();
 
@@ -26,6 +26,12 @@ protected:
 
 typedef cPlaneEKF::Vector Vector;
 typedef cPlaneEKF::Matrix Matrix;
+
+
+Vector z;
+double z1[3];
+Vector u;
+Vector X;
 
 cPlaneEKF::cPlaneEKF() 
 {
@@ -251,6 +257,8 @@ void cPlaneEKF::makeProcess()
         x_(7)= x(7) + Period*x(8);
         x_(8)= x(8);
         x.swap(x_);
+        
+        
 }
 
 void cPlaneEKF::makeMeasure()
@@ -260,12 +268,32 @@ void cPlaneEKF::makeMeasure()
         z(3)=x(7);
 }
 
+cPlaneEKF filter;
+
+void poseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg)
+{
+        z1[0]=msg->pose.pose.position.x;
+        z1[1]=msg->pose.pose.position.y;
+        z.assign(3,z1);
+        filter.step(u,z);
+        //X=filter.getX();
+        
+}
+
+void imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
+
+{
+        z1[2]=msg->orientation.x;
+
+        
+}
+
 int main(int argc, char **argv)
 {       
       
         ros::init(argc, argv, "listener");
         ros::NodeHandle n;
-        cPlaneEKF filter;
+        
        
         static const double P[]={1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,
                         0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,
@@ -292,5 +320,12 @@ int main(int argc, char **argv)
         y.assign(8,x);
 
         filter.init(y,P0);
+        
+        ros::Subscriber sub1 = n.subscribe("/imu/data", 1000, imuCallback);
+        ros::Subscriber sub2 = n.subscribe("/pose_tracker", 1000, poseCallback);
+
+        
+        ros::spin();
+        return 0;
 
 }
