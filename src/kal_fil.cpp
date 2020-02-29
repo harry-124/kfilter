@@ -1,6 +1,7 @@
 #include "ros/ros.h"
 #include "sensor_msgs/Imu.h"
-#include "geometry_msgs/PoseWithCovarianceStamped.h"
+#include "nav_msgs/Odometry.h"
+#include "ros/console.h"
 #include <bits/stdc++.h>
 #include "kalman/ekfilter.hpp"
 #include <cmath>
@@ -28,14 +29,13 @@ typedef cPlaneEKF::Vector Vector;
 typedef cPlaneEKF::Matrix Matrix;
 
 
-Vector z;
-double z1[3];
-Vector u;
-Vector X;
+Vector z(3);
+Vector u(0);
+double a,b,c,d;
 
 cPlaneEKF::cPlaneEKF() 
 {
-        setDim(8,0,3,6,3);
+        setDim(8,0,3,5,5);
         Period = 0.02;
 }
 
@@ -180,10 +180,10 @@ void cPlaneEKF::makeBaseH()
         H(2,7) = 0.0;
         H(2,8) = 0.0;
 
-        H(3,1) = 1.0;
+        H(3,1) = 0.0;
         H(3,2) = 0.0;
         H(3,3) = 0.0;
-        H(3,4) = 0.0;
+        H(3,4) = 1.0;
         H(3,5) = 0.0;
         H(3,6) = 0.0;
         H(3,7) = 0.0;
@@ -191,10 +191,10 @@ void cPlaneEKF::makeBaseH()
 
         H(4,1) = 0.0;
         H(4,2) = 0.0;
-        H(4,3) = 1.0;
+        H(4,3) = 0.0;
         H(4,4) = 0.0;
         H(4,5) = 0.0;
-        H(4,6) = 0.0;
+        H(4,6) = 1.0;
         H(4,7) = 0.0;
         H(4,8) = 0.0;
 
@@ -205,16 +205,9 @@ void cPlaneEKF::makeBaseH()
         H(5,5) = 0.0;
         H(5,6) = 0.0;
         H(5,7) = 1.0;
-        H(5,8) = 0.0;
+        H(5,8) = 0.0;        
 
-        H(6,1) = 0.0;
-        H(6,2) = 0.0;
-        H(6,3) = 0.0;
-        H(6,4) = 0.0;
-        H(6,5) = 0.0;
-        H(6,6) = 0.0;
-        H(6,7) = 0.0;
-        H(6,8) = 1.0;
+       
 }
 
 void cPlaneEKF::makeBaseV()
@@ -222,20 +215,29 @@ void cPlaneEKF::makeBaseV()
         V(1,1) = 1.0;
         V(1,2) = 0.0;
         V(1,3) = 0.0;
+        V(1,4) = 0.0;
+        V(1,5) = 0.0;
         V(2,1) = 0.0;
-        V(2,2) = 0.0;
+        V(2,2) = 1.0;
         V(2,3) = 0.0;
+        V(2,4) = 0.0;
+        V(2,5) = 0.0;
         V(3,1) = 0.0;
-        V(3,2) = 1.0;
-        V(3,3) = 0.0;
+        V(3,2) = 0.0;
+        V(3,3) = 1.0;
+        V(3,4) = 0.0;
+        V(3,5) = 0.0;
         V(4,1) = 0.0;
         V(4,2) = 0.0;
         V(4,3) = 0.0;
+        V(4,4) = 1.0;
+        V(4,5) = 0.0;
         V(5,1) = 0.0;
         V(5,2) = 0.0;
-        V(5,3) = 1.0;
-        V(6,1) = 0.0;
-        V(6,2) = 1.0;
+        V(5,3) = 0.0;
+        V(5,4) = 0.0;
+        V(5,5) = 1.0;
+  
 }
 
 void cPlaneEKF::makeBaseR()
@@ -243,6 +245,8 @@ void cPlaneEKF::makeBaseR()
         R(1,1) = 0.01*0.01;
         R(2,2) = 0.01*0.01;
         R(3,3) = 0.01*0.01;
+        R(4,4) = 0.01*0.01;
+        R(5,5) = 0.01*0.01;
 }
 
 void cPlaneEKF::makeProcess()
@@ -256,6 +260,7 @@ void cPlaneEKF::makeProcess()
         x_(6)= x(6);
         x_(7)= x(7) + Period*x(8);
         x_(8)= x(8);
+        std::cout<<x(4)<<","<<x(7)<<","<<x(8)<<"\n";
         x.swap(x_);
         
         
@@ -264,28 +269,30 @@ void cPlaneEKF::makeProcess()
 void cPlaneEKF::makeMeasure()
 {
         z(1)=x(1);
-        z(2)=x(4);
-        z(3)=x(7);
+        z(2)=x(3);
+        z(3)=x(4);
+        z(4)=x(6);
+        z(5)=x(7);
 }
 
 cPlaneEKF filter;
 
-void poseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg)
-{
-        z1[0]=msg->pose.pose.position.x;
-        z1[1]=msg->pose.pose.position.y;
-        z.assign(3,z1);
+void poseCallback(const nav_msgs::Odometry::ConstPtr& msg)
+{       
+        z(1)=msg->pose.pose.position.x;
+        z(3)=msg->pose.pose.position.y;
         filter.step(u,z);
-        //X=filter.getX();
-        
 }
 
 void imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
 
-{
-        z1[2]=msg->orientation.x;
-
-        
+{       a=msg->orientation.x;
+        b=msg->orientation.y;
+        c=msg->orientation.z;
+        d=msg->orientation.w;
+        z(5)=(atan2(a*d - b*c,a*a + b*b -c*c -d*d))*180/3.14;
+        z(2)=msg->linear_acceleration.x;
+        z(4)=msg->linear_acceleration.y;
 }
 
 int main(int argc, char **argv)
@@ -295,16 +302,26 @@ int main(int argc, char **argv)
         ros::NodeHandle n;
         
        
-        static const double P[]={1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,
-                        0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,
-                        0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0,
-                        0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,
-                        0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,
-                        0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,
-                        0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,
-                        0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0};
-        Matrix P0;
-        P0.assign(1,64,P);
+        /*const double P1[8][8]={{1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0},
+                        {0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0},
+                        {0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0},
+                        {0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0},
+                        {0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0},
+                        {0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0},
+                        {0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0},
+                        {0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0}};
+
+        //const double *P=P1;*/
+        
+        Matrix P0(8,8);
+        for (int i=1;i<9;i++)
+                for(int j=1;j<9;j++)
+                {
+                        if(i==j)
+                        P0(i,j)=1.0;
+                        else
+                        P0(i,j)=0.0;
+                }
 
         double x[8];
         x[0]=0.0;
@@ -319,10 +336,11 @@ int main(int argc, char **argv)
         Vector y;
         y.assign(8,x);
 
-        filter.init(y,P0);
         
+        filter.init(y,P0);
+       
         ros::Subscriber sub1 = n.subscribe("/imu/data", 1000, imuCallback);
-        ros::Subscriber sub2 = n.subscribe("/pose_tracker", 1000, poseCallback);
+        ros::Subscriber sub2 = n.subscribe("/vo", 1000, poseCallback);
 
         
         ros::spin();
