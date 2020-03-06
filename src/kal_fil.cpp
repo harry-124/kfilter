@@ -33,6 +33,7 @@ Vector z(3);
 Vector u(0);
 double a,b,c,d;
 
+
 cPlaneEKF::cPlaneEKF() 
 {
         setDim(8,0,3,5,5);
@@ -260,7 +261,12 @@ void cPlaneEKF::makeProcess()
         x_(6)= x(6);
         x_(7)= x(7) + Period*x(8);
         x_(8)= x(8);
-        std::cout<<x(4)<<","<<x(7)<<","<<x(8)<<"\n";
+        std::cout<<"POSITION"<<"\n";
+        std::cout<<"X:"<<x_(1)<<"Y:"<<x_(4)<<"THETA:"<<x_(7)<<"\n";
+        std::cout<<"VELOCITY"<<"\n";
+        std::cout<<"X:"<<x_(2)<<"Y:"<<"ANGULAR:"<<x_(8)<<"\n";
+        std::cout<<"ACCELERATION"<<"\n";
+        std::cout<<"X:"<<x_(3)<<"Y:"<<x_(6)<<"\n";
         x.swap(x_);
         
         
@@ -300,6 +306,7 @@ int main(int argc, char **argv)
       
         ros::init(argc, argv, "listener");
         ros::NodeHandle n;
+        
         
        
         /*const double P1[8][8]={{1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0},
