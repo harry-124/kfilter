@@ -1,10 +1,19 @@
 #include "ros/ros.h"
+#include "geometry_msgs/PoseWithCovarianceStamped.h"
+#include "std_msgs/Float64.h"
 #include "sensor_msgs/Imu.h"
 #include "nav_msgs/Odometry.h"
 #include "ros/console.h"
 #include <bits/stdc++.h>
 #include "kalman/ekfilter.hpp"
 #include <cmath>
+
+       
+
+nav_msgs::Odometry odom;
+ros::Publisher odom_pub;
+ros::Publisher yaw_filt;
+ros::Publisher yaw;
 
 class cPlaneEKF:public Kalman::EKFilter<double,1,false,true,false>{
 public:
@@ -32,11 +41,12 @@ typedef cPlaneEKF::Matrix Matrix;
 Vector z(3);
 Vector u(0);
 double a,b,c,d;
+std_msgs::Float64 e;
 
 
 cPlaneEKF::cPlaneEKF() 
 {
-        setDim(8,0,3,5,5);
+        setDim(8,0,3,6,6);
         Period = 0.02;
 }
 
@@ -206,7 +216,16 @@ void cPlaneEKF::makeBaseH()
         H(5,5) = 0.0;
         H(5,6) = 0.0;
         H(5,7) = 1.0;
-        H(5,8) = 0.0;        
+        H(5,8) = 0.0;
+
+        H(6,1) = 0.0;
+        H(6,2) = 0.0;
+        H(6,3) = 0.0;
+        H(6,4) = 0.0;
+        H(6,5) = 0.0;
+        H(6,6) = 0.0;
+        H(6,7) = 0.0;
+        H(6,8) = 1.0;          
 
        
 }
@@ -218,36 +237,48 @@ void cPlaneEKF::makeBaseV()
         V(1,3) = 0.0;
         V(1,4) = 0.0;
         V(1,5) = 0.0;
+        V(1,6) = 0.0;
         V(2,1) = 0.0;
         V(2,2) = 1.0;
         V(2,3) = 0.0;
         V(2,4) = 0.0;
         V(2,5) = 0.0;
+        V(2,6) = 0.0;
         V(3,1) = 0.0;
         V(3,2) = 0.0;
         V(3,3) = 1.0;
         V(3,4) = 0.0;
         V(3,5) = 0.0;
+        V(3,6) = 0.0;
         V(4,1) = 0.0;
         V(4,2) = 0.0;
         V(4,3) = 0.0;
         V(4,4) = 1.0;
         V(4,5) = 0.0;
+        V(4,6) = 0.0;
         V(5,1) = 0.0;
         V(5,2) = 0.0;
         V(5,3) = 0.0;
         V(5,4) = 0.0;
         V(5,5) = 1.0;
+        V(5,6) = 0.0;
+        V(6,1) = 0.0;
+        V(6,2) = 0.0;
+        V(6,3) = 0.0;
+        V(6,4) = 0.0;
+        V(6,5) = 0.0;
+        V(6,6) = 1.0;
   
 }
 
 void cPlaneEKF::makeBaseR()
 {       
-        R(1,1) = 0.01*0.01;
-        R(2,2) = 0.01*0.01;
-        R(3,3) = 0.01*0.01;
-        R(4,4) = 0.01*0.01;
-        R(5,5) = 0.01*0.01;
+        R(1,1) = 0.0001;
+        R(2,2) = 3.0;
+        R(3,3) = 0.001;
+        R(4,4) = 0.00001;
+        R(5,5) = 0.0001;
+        R(6,6) = 0.0001;
 }
 
 void cPlaneEKF::makeProcess()
@@ -261,12 +292,14 @@ void cPlaneEKF::makeProcess()
         x_(6)= x(6);
         x_(7)= x(7) + Period*x(8);
         x_(8)= x(8);
-        std::cout<<"POSITION"<<"\n";
-        std::cout<<"X:"<<x_(1)<<"Y:"<<x_(4)<<"THETA:"<<x_(7)<<"\n";
-        std::cout<<"VELOCITY"<<"\n";
-        std::cout<<"X:"<<x_(2)<<"Y:"<<"ANGULAR:"<<x_(8)<<"\n";
-        std::cout<<"ACCELERATION"<<"\n";
-        std::cout<<"X:"<<x_(3)<<"Y:"<<x_(6)<<"\n";
+        e.data=x_(7);
+        odom.header.stamp = ros::Time::now();
+        odom.pose.pose.position.x=x_(1);
+        odom.pose.pose.position.y=x_(4);
+        odom_pub.publish(odom);
+        yaw_filt.publish(e);
+   
+        
         x.swap(x_);
         
         
@@ -279,15 +312,17 @@ void cPlaneEKF::makeMeasure()
         z(3)=x(4);
         z(4)=x(6);
         z(5)=x(7);
+        z(6)=x(8);
 }
 
 cPlaneEKF filter;
 
-void poseCallback(const nav_msgs::Odometry::ConstPtr& msg)
+void poseCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg)
 {       
         z(1)=msg->pose.pose.position.x;
         z(3)=msg->pose.pose.position.y;
         filter.step(u,z);
+        
 }
 
 void imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
@@ -296,7 +331,11 @@ void imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
         b=msg->orientation.y;
         c=msg->orientation.z;
         d=msg->orientation.w;
-        z(5)=(atan2(a*d - b*c,a*a + b*b -c*c -d*d))*180/3.14;
+
+        z(5)=(atan2(2.0*(c*d - a*b),a*a - b*b -c*c +d*d))*180/3.14;
+        z(6)=(msg->angular_velocity.z)*180/3.14;
+        e.data=z(5);
+        yaw.publish(e);
         z(2)=msg->linear_acceleration.x;
         z(4)=msg->linear_acceleration.y;
 }
@@ -305,10 +344,12 @@ int main(int argc, char **argv)
 {       
       
         ros::init(argc, argv, "listener");
-        ros::NodeHandle n;
         
         
-       
+        ros::NodeHandle n; 
+        odom_pub = n.advertise<nav_msgs::Odometry>("odom", 50);
+        yaw_filt=n.advertise<std_msgs::Float64>("yaw_filt",50);
+        yaw=n.advertise<std_msgs::Float64>("yaw",50);
         /*const double P1[8][8]={{1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0},
                         {0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0},
                         {0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0},
@@ -325,10 +366,13 @@ int main(int argc, char **argv)
                 for(int j=1;j<9;j++)
                 {
                         if(i==j)
-                        P0(i,j)=1.0;
+                        P0(i,j)=20.0;
                         else
                         P0(i,j)=0.0;
                 }
+              
+        P0(8,8)=10.0;
+        P0(7,7)=10.0;
 
         double x[8];
         x[0]=0.0;
@@ -345,12 +389,16 @@ int main(int argc, char **argv)
 
         
         filter.init(y,P0);
-       
-        ros::Subscriber sub1 = n.subscribe("/imu/data", 1000, imuCallback);
-        ros::Subscriber sub2 = n.subscribe("/vo", 1000, poseCallback);
-
+ 
+        odom.header.frame_id = "odom";
+        odom.child_frame_id = "base_link";
+        odom.pose.pose.position.z = 0.0;
         
+        ros::Subscriber sub1 = n.subscribe("/imu/data", 1000, imuCallback);
+        ros::Subscriber sub2 = n.subscribe("/pose_tracker", 1000, poseCallback);
         ros::spin();
+        
+        
         return 0;
 
 }
